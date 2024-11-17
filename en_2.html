@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Les 4 - Unit 2 - Meerdere Spelmodi</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 50px;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+    #game-container {
+      border: 2px solid #ccc;
+      padding: 20px;
+      border-radius: 15px;
+      display: none;
+      background: #fff9d7;
+    }
+    #mode-selection {
+      display: block;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      background-color: #4caf50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    #result {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+    #score, #timer {
+      font-size: 20px;
+      margin: 10px;
+    }
+    #summary {
+      display: none;
+    }
+    /* Enhanced Styling for Multiple Choice Buttons */
+    .choices-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 20px;
+    }
+    .choice-btn {
+      flex: 1 1 40%;
+      padding: 15px 10px;
+      font-size: 16px;
+      cursor: pointer;
+      background-color: #008cba;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+      min-width: 120px;
+    }
+    .choice-btn:hover {
+      background-color: #005f5f;
+      transform: scale(1.05);
+    }
+    @media (min-width: 600px) {
+      .choice-btn {
+        flex: 1 1 20%;
+        min-width: 150px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="mode-selection">
+    <h1>Les 4 - Unit 2</h1>
+    <p>Kies een spelmodus:</p>
+    <button onclick="startGame('NLtoEN', 'type')">Nederlands → Engels (Invoeren)</button>
+    <button onclick="startGame('ENtoNL', 'type')">Engels → Nederlands (Invoeren)</button>
+    <button onclick="startGame('NLtoEN', 'multiple')">Nederlands → Engels (Meerkeuze)</button>
+    <button onclick="startGame('ENtoNL', 'multiple')">Engels → Nederlands (Meerkeuze)</button>
+  </div>
+
+  <div id="game-container">
+    <h1>Les 4 - Unit 2</h1>
+    <p id="timer">⏱️ Tijd over: <span id="time-left">30</span>s</p>
+    <p id="score">🏆 Score: <span id="score-value">0</span></p>
+    <p id="question">Vertaal <span id="question-direction"></span>: <span id="word"></span></p>
+    <div id="input-section">
+      <input type="text" id="answer" placeholder="Typ je antwoord hier">
+      <br>
+      <button id="submit-btn" onclick="checkAnswer()">Inleveren</button>
+    </div>
+    <div id="choices" style="display: none;">
+      <div class="choices-container" id="choices-container"></div>
+    </div>
+    <div id="result"></div>
+  </div>
+
+  <div id="summary">
+    <h2>Samenvatting van het spel</h2>
+    <p>Totaal aantal woorden: <span id="total-words"></span></p>
+    <p>Percentage goed: <span id="correct-percentage"></span>%</p>
+    <ul id="incorrect-list"></ul>
+    <button onclick="restartGame()">Begin opnieuw</button>
+  </div>
+
+  <script>
+const words = [
+      { english: "banknotes", dutch: ["briefgeld"] },
+      { english: "broccoli", dutch: ["broccoli"] },
+      { english: "carrots", dutch: ["wortelen", "wortels"] },
+      { english: "change", dutch: ["wisselgeld"] },
+      { english: "cheap", dutch: ["goedkoop"] },
+      { english: "checkout", dutch: ["kassa"] },
+      { english: "coins", dutch: ["muntgeld"] },
+      { english: "delicious", dutch: ["heerlijk", "lekker"] },
+      { english: "drink", dutch: ["drankje"] },
+      { english: "fish", dutch: ["vis"] },
+      { english: "food", dutch: ["voedsel", "eten"] },
+      { english: "fruit", dutch: ["fruit"] },
+      { english: "fruit section", dutch: ["fruit afdeling"] },
+      { english: "greengrocer", dutch: ["groenteboer"] },
+      { english: "meat", dutch: ["vlees"] },
+      { english: "money", dutch: ["geld"] },
+      { english: "peaches", dutch: ["perziken"] },
+      { english: "pence", dutch: ["Brits muntgeld"] },
+      { english: "pound", dutch: ["Brits briefgeld"] },
+      { english: "price", dutch: ["prijs"] },
+      { english: "shopping list", dutch: ["boodschappenlijst"] },
+      { english: "shopping trolley", dutch: ["winkelwagentje"] },
+      { english: "strawberries", dutch: ["aardbeien"] },
+      { english: "supermarket", dutch: ["supermarkt"] },
+      { english: "sweets", dutch: ["snoep"] },
+      { english: "to be hungry", dutch: ["honger hebben"] },
+      { english: "to buy", dutch: ["kopen"] },
+      { english: "to pay", dutch: ["betalen"] },
+      { english: "to smell", dutch: ["ruiken"] },
+      { english: "vegetables", dutch: ["groenten"] }
+    ];
+
+    let remainingWords = [...words];
+    let incorrectWords = [];
+    let incorrectWordsOnce = new Set();
+    let totalWordsPlayed = 0;
+    let correctAnswers = 0;
+    let score = 0;
+    let timeLeft = 30; // Timer set to 30 seconds
+    let timer;
+    let currentMode = "ENtoNL";
+    let inputMode = "type"; // Default input mode
+    let inputLocked = false;
+
+    function startGame(mode, inputType) {
+      currentMode = mode;
+      inputMode = inputType;
+
+      document.getElementById("mode-selection").style.display = "none";
+      document.getElementById("game-container").style.display = "block";
+
+      if (inputMode === "multiple") {
+        document.getElementById("input-section").style.display = "none";
+        document.getElementById("choices").style.display = "block";
+      } else {
+        document.getElementById("input-section").style.display = "block";
+        document.getElementById("choices").style.display = "none";
+      }
+
+      loadWord();
+    }
+
+    function loadWord() {
+      clearInterval(timer);
+      inputLocked = false;
+
+      if (remainingWords.length === 0) {
+        if (incorrectWords.length > 0) {
+          remainingWords = [...incorrectWords];
+          incorrectWords = [];
+        } else {
+          showSummary();
+          return;
+        }
+      }
+
+      timeLeft = 30; // Reset timer to 30 seconds
+      document.getElementById("time-left").textContent = timeLeft;
+      timer = setInterval(updateTimer, 1000);
+
+      const currentWordIndex = Math.floor(Math.random() * remainingWords.length);
+      const word = remainingWords[currentWordIndex];
+      window.currentWord = word; // Store current word globally for access in checkAnswer
+
+      if (currentMode === "ENtoNL") {
+        document.getElementById("question-direction").textContent = "naar Nederlands";
+        document.getElementById("word").textContent = word.english;
+      } else {
+        document.getElementById("question-direction").textContent = "naar Engels";
+        document.getElementById("word").textContent = word.dutch[0];
+      }
+
+      document.getElementById("result").textContent = "";
+      if (inputMode === "type") {
+        document.getElementById("answer").value = ""; // Clear the input field
+      } else {
+        generateChoices(word);
+      }
+    }
+
+    function generateChoices(word) {
+      const choicesContainer = document.getElementById("choices-container");
+      choicesContainer.innerHTML = ""; // Clear previous choices
+
+      const correctAnswer = currentMode === "ENtoNL" ? word.dutch[0] : word.english;
+
+      // Gather all possible incorrect answers based on the current mode
+      let allPossibleAnswers = [];
+      if (currentMode === "ENtoNL") {
+        words.forEach(w => {
+          allPossibleAnswers.push(...w.dutch);
+        });
+      } else {
+        words.forEach(w => {
+          allPossibleAnswers.push(w.english);
+        });
+      }
+
+      // Remove duplicates and the correct answer
+      allPossibleAnswers = allPossibleAnswers.filter(answer => answer.toLowerCase() !== correctAnswer.toLowerCase());
+      allPossibleAnswers = [...new Set(allPossibleAnswers)];
+
+      // Shuffle and pick three incorrect answers
+      shuffle(allPossibleAnswers);
+      const distractors = allPossibleAnswers.slice(0, 3);
+
+      // Combine correct answer with distractors
+      const options = [correctAnswer, ...distractors];
+      shuffle(options); // Shuffle the options
+
+      // Create buttons for each option
+      options.forEach(option => {
+        const button = document.createElement("button");
+        button.className = "choice-btn";
+        button.textContent = option;
+        button.onclick = () => checkAnswer(option, correctAnswer);
+        choicesContainer.appendChild(button);
+      });
+    }
+
+    function checkAnswer(selectedAnswer = null, correctAnswer = null) {
+      if (inputLocked) return; // Prevent multiple inputs
+      inputLocked = true;
+
+      clearInterval(timer);
+
+      let userAnswer;
+      if (inputMode === "multiple") {
+        userAnswer = selectedAnswer.trim().toLowerCase();
+        correctAnswer = correctAnswer.trim().toLowerCase();
+      } else {
+        userAnswer = document.getElementById("answer").value.trim().toLowerCase();
+        correctAnswer = currentMode === "ENtoNL"
+          ? window.currentWord.dutch.map(a => a.toLowerCase())
+          : [window.currentWord.english.toLowerCase()];
+      }
+
+      totalWordsPlayed++;
+
+      let isCorrect;
+      if (inputMode === "multiple") {
+        isCorrect = userAnswer === correctAnswer.toLowerCase();
+      } else {
+        isCorrect = correctAnswer.includes(userAnswer);
+      }
+
+      if (isCorrect) {
+        correctAnswers++;
+        document.getElementById("result").textContent = "✅ Goed gedaan!";
+        document.getElementById("result").style.color = "green";
+        score += 10;
+        document.getElementById("score-value").textContent = score;
+        // Remove the word from remainingWords
+        const index = remainingWords.indexOf(window.currentWord);
+        if (index > -1) {
+          remainingWords.splice(index, 1);
+        }
+      } else {
+        let correctDisplay;
+        if (inputMode === "multiple") {
+          correctDisplay = correctAnswer;
+        } else {
+          correctDisplay = currentMode === "ENtoNL"
+            ? window.currentWord.dutch.join(" of ")
+            : window.currentWord.english;
+        }
+        document.getElementById("result").textContent = `❌ Fout! Het juiste antwoord is: "${correctDisplay}".`;
+        document.getElementById("result").style.color = "red";
+        incorrectWords.push(window.currentWord);
+        incorrectWordsOnce.add(window.currentWord);
+        // Remove the word from remainingWords
+        const index = remainingWords.indexOf(window.currentWord);
+        if (index > -1) {
+          remainingWords.splice(index, 1);
+        }
+      }
+
+      setTimeout(loadWord, 1500); // Automatically load the next word after 1.5 seconds
+    }
+
+    function updateTimer() {
+      timeLeft -= 1;
+      document.getElementById("time-left").textContent = timeLeft;
+      if (timeLeft <= 0) {
+        clearInterval(timer);
+        const word = window.currentWord;
+        let correctDisplay;
+        if (inputMode === "multiple") {
+          correctDisplay = currentMode === "ENtoNL" ? word.dutch.join(" of ") : word.english;
+        } else {
+          correctDisplay = currentMode === "ENtoNL" ? word.dutch.join(" of ") : word.english;
+        }
+        document.getElementById("result").textContent = `⏰ Tijd voorbij! Het juiste antwoord is: "${correctDisplay}".`;
+        document.getElementById("result").style.color = "red";
+        incorrectWords.push(word);
+        incorrectWordsOnce.add(word);
+        // Remove the word from remainingWords
+        const index = remainingWords.indexOf(word);
+        if (index > -1) {
+          remainingWords.splice(index, 1);
+        }
+        setTimeout(loadWord, 1500); // Automatically load the next word after 1.5 seconds
+      }
+    }
+
+    function showSummary() {
+      document.getElementById("game-container").style.display = "none";
+      const summary = document.getElementById("summary");
+      const incorrectList = document.getElementById("incorrect-list");
+      incorrectList.innerHTML = "";
+
+      incorrectWordsOnce.forEach(word => {
+        const li = document.createElement("li");
+        li.textContent = `${word.english} ↔ ${word.dutch.join(" of ")}`;
+        incorrectList.appendChild(li);
+      });
+
+      const correctPercentage = totalWordsPlayed > 0 ? Math.round((correctAnswers / totalWordsPlayed) * 100) : 0;
+
+      document.getElementById("total-words").textContent = totalWordsPlayed;
+      document.getElementById("correct-percentage").textContent = correctPercentage;
+
+      summary.style.display = "block";
+    }
+
+    function restartGame() {
+      remainingWords = [...words];
+      incorrectWords = [];
+      incorrectWordsOnce = new Set();
+      totalWordsPlayed = 0;
+      correctAnswers = 0;
+      score = 0;
+      document.getElementById("score-value").textContent = score;
+      document.getElementById("summary").style.display = "none";
+      document.getElementById("game-container").style.display = "none";
+      document.getElementById("mode-selection").style.display = "block";
+    }
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+  </script>
+</body>
+</html>
