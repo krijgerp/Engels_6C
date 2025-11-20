@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Engels – Unit 1 (les 1–4)</title>
+  <style>
+    body {font-family: Arial, sans-serif; text-align:center; margin:40px; background:#f9f9f9;}
+    #game-container {border:2px solid #ccc; padding:20px; border-radius:15px; display:none; background:#fff;}
+    #mode-selection button, #controls button {
+      padding:10px 18px; margin:5px; font-size:16px; cursor:pointer;
+      background:#4caf50; color:#fff; border:none; border-radius:5px;
+    }
+    #mode-selection button:hover, #controls button:hover {background:#45a049;}
+    #question {font-size:24px; margin:20px 0;}
+    #answer {padding:8px; font-size:18px; width:80%; max-width:300px;}
+    #feedback {margin-top:10px; font-weight:bold;}
+    #lesson-select label {margin:0 8px;}
+  </style>
+</head>
+<body>
+
+<h1>Engels – Unit 1</h1>
+
+<div id="mode-selection">
+  <p>Kies modus:</p>
+  <button onclick="startGame('en-nl')">Engels → Nederlands</button>
+  <button onclick="startGame('nl-en')">Nederlands → Engels</button>
+  <div id="lesson-select">
+    <p>Welke lessen?</p>
+    <label><input type="checkbox" value="1" checked> Les 1</label>
+    <label><input type="checkbox" value="2" checked> Les 2</label>
+    <label><input type="checkbox" value="3" checked> Les 3</label>
+    <label><input type="checkbox" value="4" checked> Les 4</label>
+  </div>
+</div>
+
+<div id="game-container">
+  <div id="controls">
+    <button onclick="showNext()">Volgende</button>
+    <button onclick="stopGame()">Stop</button>
+  </div>
+  <div id="question"></div>
+  <input id="answer" autocomplete="off" placeholder="Typ het antwoord en druk Enter">
+  <div id="feedback"></div>
+</div>
+
+<script>
+const WORDS = [
+  // Lesson 1
+  {lesson:1, en:"mother", nl:"moeder"},
+  {lesson:1, en:"father", nl:"vader"},
+  {lesson:1, en:"brother", nl:"broer"},
+  {lesson:1, en:"sister", nl:"zus"},
+  {lesson:1, en:"son", nl:"zoon"},
+  {lesson:1, en:"daughter", nl:"dochter"},
+  {lesson:1, en:"aunt", nl:"tante"},
+  {lesson:1, en:"uncle", nl:"oom"},
+  {lesson:1, en:"cousin", nl:"neef/nicht (van oom/tante)"},
+  {lesson:1, en:"grandmother", nl:"oma"},
+  {lesson:1, en:"grandfather", nl:"opa"},
+  {lesson:1, en:"family", nl:"familie/gezin"},
+
+  // Lesson 2
+  {lesson:2, en:"family members", nl:"familieleden/gezinsleden"},
+  {lesson:2, en:"nephew", nl:"neef (zoon van broer of zus)"},
+  {lesson:2, en:"niece", nl:"nicht (dochter van broer of zus)"},
+  {lesson:2, en:"husband and wife", nl:"echtgenoot en echtgenote"},
+  {lesson:2, en:"spring", nl:"lente"},
+  {lesson:2, en:"summer", nl:"zomer"},
+  {lesson:2, en:"autumn", nl:"herfst"},
+  {lesson:2, en:"winter", nl:"winter"},
+  {lesson:2, en:"the months of the year", nl:"de maanden van het jaar"},
+  {lesson:2, en:"numbers", nl:"getallen"},
+
+  // Lesson 3
+  {lesson:3, en:"holiday", nl:"vakantie"},
+  {lesson:3, en:"Austria – Austrian", nl:"Oostenrijk – Oostenrijks"},
+  {lesson:3, en:"Germany – German", nl:"Duitsland – Duits"},
+  {lesson:3, en:"France – French", nl:"Frankrijk – Frans"},
+  {lesson:3, en:"Belgium – Belgian", nl:"België – Belgisch"},
+  {lesson:3, en:"first name", nl:"voornaam"},
+  {lesson:3, en:"surname", nl:"achternaam"},
+  {lesson:3, en:"the alphabet", nl:"het alfabet"},
+  {lesson:3, en:"children", nl:"kinderen"},
+  {lesson:3, en:"picture", nl:"plaatje, schilderij, foto"},
+
+  // Lesson 4
+  {lesson:4, en:"country", nl:"land"},
+  {lesson:4, en:"public holiday", nl:"nationale feestdag"},
+  {lesson:4, en:"King’s day", nl:"Koningsdag"},
+  {lesson:4, en:"Christmas", nl:"Kerstmis"},
+  {lesson:4, en:"to have a party", nl:"een feest geven"},
+  {lesson:4, en:"the Netherlands – Dutch", nl:"Nederland – Nederlands"},
+  {lesson:4, en:"Turkey – Turkish", nl:"Turkije – Turks"},
+  {lesson:4, en:"England – English", nl:"Engeland – Engels"},
+  {lesson:4, en:"Poland – Polish", nl:"Polen – Pools"},
+  {lesson:4, en:"Greece – Greek", nl:"Griekenland – Grieks"},
+  {lesson:4, en:"to pretend", nl:"doen alsof"}
+];
+
+let mode = "en-nl";
+let pool = [];
+let current = null;
+
+function startGame(selectedMode) {
+  mode = selectedMode;
+  const checkedLessons = Array.from(
+    document.querySelectorAll('#lesson-select input:checked')
+  ).map(cb => Number(cb.value));
+
+  pool = WORDS.filter(w => checkedLessons.includes(w.lesson));
+  if (pool.length === 0) {
+    alert("Selecteer minstens één les.");
+    return;
+  }
+  document.getElementById('mode-selection').style.display = 'none';
+  document.getElementById('game-container').style.display = 'block';
+  document.getElementById('feedback').textContent = "";
+  showNext();
+  document.getElementById('answer').focus();
+}
+
+function stopGame() {
+  document.getElementById('game-container').style.display = 'none';
+  document.getElementById('mode-selection').style.display = 'block';
+}
+
+function showNext() {
+  current = pool[Math.floor(Math.random() * pool.length)];
+  const q = (mode === "en-nl") ? current.en : current.nl;
+  document.getElementById('question').textContent = q;
+  document.getElementById('answer').value = "";
+  document.getElementById('feedback').textContent = "";
+}
+
+document.getElementById('answer').addEventListener('keydown', e => {
+  if (e.key === "Enter") checkAnswer();
+});
+
+function normalize(str) {
+  return str.toLowerCase().trim();
+}
+
+function checkAnswer() {
+  if (!current) return;
+  const user = normalize(document.getElementById('answer').value);
+  const correct = (mode === "en-nl") ? current.nl : current.en;
+
+  const ok = user.length > 0 && correct.toLowerCase().startsWith(user);
+  const feedback = document.getElementById('feedback');
+  if (ok) {
+    feedback.textContent = "Goed! ✔  (" + correct + ")";
+    feedback.style.color = "green";
+  } else {
+    feedback.textContent = "Niet helemaal… Antwoord: " + correct;
+    feedback.style.color = "red";
+  }
+}
+</script>
+</body>
+</html>
