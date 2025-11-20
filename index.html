@@ -2,20 +2,21 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>Engels – Unit 1 (les 1–4) 17:57</title>
+  <title>Engels – Unit 1 (les 1–4)</title>
   <style>
     body {font-family: Arial, sans-serif; text-align:center; margin:40px; background:#f9f9f9;}
     #game-container {border:2px solid #ccc; padding:20px; border-radius:15px; display:none; background:#fff;}
-    #mode-selection button, #controls button {
+    #mode-selection button, #controls button, #mc-options button {
       padding:10px 18px; margin:5px; font-size:16px; cursor:pointer;
       background:#4caf50; color:#fff; border:none; border-radius:5px;
     }
-    #mode-selection button:hover, #controls button:hover {background:#45a049;}
+    #mode-selection button:hover, #controls button:hover, #mc-options button:hover {background:#45a049;}
     #question {font-size:24px; margin:20px 0;}
     #answer {padding:8px; font-size:18px; width:80%; max-width:300px;}
     #feedback {margin-top:10px; font-weight:bold;}
     #lesson-select label {margin:0 8px;}
     #score {margin-top:10px; font-weight:bold;}
+    #mc-options {margin:10px 0;}
   </style>
 </head>
 <body>
@@ -24,8 +25,10 @@
 
 <div id="mode-selection">
   <p>Kies modus:</p>
-  <button onclick="startGame('en-nl')">Engels → Nederlands</button>
-  <button onclick="startGame('nl-en')">Nederlands → Engels</button>
+  <button onclick="startGame('en-nl','open')">Engels → Nederlands (open)</button>
+  <button onclick="startGame('en-nl','mc')">Engels → Nederlands (meerkeuze)</button><br>
+  <button onclick="startGame('nl-en','open')">Nederlands → Engels (open)</button>
+  <button onclick="startGame('nl-en','mc')">Nederlands → Engels (meerkeuze)</button>
   <div id="lesson-select">
     <p>Welke lessen?</p>
     <label><input type="checkbox" value="1" checked> Les 1</label>
@@ -42,6 +45,7 @@
     <button onclick="stopGame()">Stop</button>
   </div>
   <div id="question"></div>
+  <div id="mc-options"></div>
   <input id="answer" autocomplete="off" placeholder="Typ het antwoord en druk Enter">
   <div id="feedback"></div>
 </div>
@@ -49,6 +53,7 @@
 <div id="summary"></div>
 
 <script>
+// en/nl can be string or array of strings (first = hoofdvorm)
 const WORDS = [
   // Lesson 1
   {lesson:1, en:"mother", nl:"moeder"},
@@ -62,10 +67,351 @@ const WORDS = [
   {
     lesson:1,
     en:"cousin",
-    nl:"neef/nicht (van oom/tante)",
-    altNl:["neef/nicht","neef","nicht"]
+    nl:[
+      "neef/nicht (van oom/tante)",
+      "neef/nicht",
+      "neef",
+      "nicht"
+    ]
   },
   {lesson:1, en:"grandmother", nl:"oma"},
   {lesson:1, en:"grandfather", nl:"opa"},
   {
     lesson:1,
+    en:"family",
+    nl:[
+      "familie/gezin",
+      "familie",
+      "gezin"
+    ]
+  },
+
+  // Lesson 2
+  {lesson:2, en:"family members", nl:"familieleden/gezinsleden"},
+  {
+    lesson:2,
+    en:"nephew",
+    nl:[
+      "neef (zoon van broer of zus)",
+      "neef"
+    ]
+  },
+  {
+    lesson:2,
+    en:"niece",
+    nl:[
+      "nicht (dochter van broer of zus)",
+      "nicht"
+    ]
+  },
+  {lesson:2, en:"husband and wife", nl:"echtgenoot en echtgenote"},
+  {lesson:2, en:"spring", nl:"lente"},
+  {lesson:2, en:"summer", nl:"zomer"},
+  {lesson:2, en:"autumn", nl:"herfst"},
+  {lesson:2, en:"winter", nl:"winter"},
+  {lesson:2, en:"the months of the year", nl:"de maanden van het jaar"},
+  {lesson:2, en:"numbers", nl:"getallen"},
+
+  // Lesson 3
+  {lesson:3, en:"holiday", nl:"vakantie"},
+  {lesson:3, en:"Austria – Austrian", nl:"Oostenrijk – Oostenrijks"},
+  {lesson:3, en:"Germany – German", nl:"Duitsland – Duits"},
+  {lesson:3, en:"France – French", nl:"Frankrijk – Frans"},
+  {lesson:3, en:"Belgium – Belgian", nl:"België – Belgisch"},
+  {lesson:3, en:"first name", nl:"voornaam"},
+  {lesson:3, en:"surname", nl:"achternaam"},
+  {lesson:3, en:"the alphabet", nl:"het alfabet"},
+  {lesson:3, en:"children", nl:"kinderen"},
+  {
+    lesson:3,
+    en:"picture",
+    nl:[
+      "plaatje, schilderij, foto",
+      "plaatje",
+      "schilderij",
+      "foto"
+    ]
+  },
+
+  // Lesson 4
+  {lesson:4, en:"country", nl:"land"},
+  {lesson:4, en:"public holiday", nl:"nationale feestdag"},
+  {lesson:4, en:"King’s day", nl:"Koningsdag"},
+  {lesson:4, en:"Christmas", nl:"Kerstmis"},
+  {lesson:4, en:"to have a party", nl:"een feest geven"},
+  {lesson:4, en:"the Netherlands – Dutch", nl:"Nederland – Nederlands"},
+  {lesson:4, en:"Turkey – Turkish", nl:"Turkije – Turks"},
+  {lesson:4, en:"England – English", nl:"Engeland – Engels"},
+  {lesson:4, en:"Poland – Polish", nl:"Polen – Pools"},
+  {lesson:4, en:"Greece – Greek", nl:"Griekenland – Grieks"},
+  {lesson:4, en:"to pretend", nl:"doen alsof"}
+];
+
+let mode = "en-nl";       // 'en-nl' of 'nl-en'
+let gameType = "open";    // 'open' of 'mc'
+let allCards = [];        // alle vragen in deze ronde
+let remaining = [];
+let current = null;
+let results = [];
+let gameActive = false;
+let answeredCurrent = false;
+let correctCount = 0;
+let wrongCount = 0;
+
+// maak array van een veld (string of array)
+function toArray(x) {
+  return Array.isArray(x) ? x : [x];
+}
+
+function makeCardFromWord(w) {
+  const enForms = toArray(w.en);
+  const nlForms = toArray(w.nl);
+  if (mode === "en-nl") {
+    return {
+      word: w,
+      question: enForms[0],
+      answerForms: nlForms,
+      answerMain: nlForms[0]
+    };
+  } else {
+    return {
+      word: w,
+      question: nlForms[0],
+      answerForms: enForms,
+      answerMain: enForms[0]
+    };
+  }
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function updateScore() {
+  document.getElementById('score').textContent =
+    "Goed: " + correctCount + " | Fout: " + wrongCount;
+}
+
+function startGame(selectedMode, selectedType) {
+  mode = selectedMode;
+  gameType = selectedType || "open";
+
+  const checkedLessons = Array.from(
+    document.querySelectorAll('#lesson-select input:checked')
+  ).map(cb => Number(cb.value));
+
+  const poolWords = WORDS.filter(w => checkedLessons.includes(w.lesson));
+  if (poolWords.length === 0) {
+    alert("Selecteer minstens één les.");
+    return;
+  }
+
+  allCards = poolWords.map(makeCardFromWord);
+  remaining = shuffle(allCards.slice());
+
+  results = [];
+  correctCount = 0;
+  wrongCount = 0;
+  updateScore();
+  gameActive = true;
+  answeredCurrent = false;
+
+  document.getElementById('mode-selection').style.display = 'none';
+  document.getElementById('game-container').style.display = 'block';
+  document.getElementById('summary').innerHTML = "";
+  document.getElementById('feedback').textContent = "";
+
+  document.getElementById('answer').style.display =
+    (gameType === "open") ? 'inline-block' : 'none';
+  document.getElementById('mc-options').style.display =
+    (gameType === "mc") ? 'block' : 'none';
+  document.getElementById('nextBtn').style.display = 'inline-block';
+
+  showNext();
+  if (gameType === "open") {
+    document.getElementById('answer').focus();
+  }
+}
+
+function stopGame() {
+  gameActive = false;
+  document.getElementById('game-container').style.display = 'none';
+  document.getElementById('mode-selection').style.display = 'block';
+}
+
+function showNext() {
+  if (!gameActive) return;
+
+  if (remaining.length === 0) {
+    endGame();
+    return;
+  }
+
+  current = remaining.pop();
+  document.getElementById('question').textContent = current.question;
+  document.getElementById('answer').value = "";
+  document.getElementById('feedback').textContent = "";
+  document.getElementById('mc-options').innerHTML = "";
+  answeredCurrent = false;
+
+  if (gameType === "mc") {
+    buildMcOptions();
+  }
+}
+
+function onNextClick() {
+  if (!answeredCurrent) {
+    alert(gameType === "open"
+      ? "Eerst beantwoorden en op Enter drukken."
+      : "Kies eerst een antwoord.");
+    return;
+  }
+  showNext();
+}
+
+document.getElementById('answer').addEventListener('keydown', e => {
+  if (e.key === "Enter") {
+    if (!gameActive) return;
+    if (gameType === "open") {
+      if (!answeredCurrent) {
+        checkAnswer();
+      } else {
+        showNext();
+      }
+    } else {
+      if (!answeredCurrent) {
+        alert("Kies eerst een antwoord.");
+      } else {
+        showNext();
+      }
+    }
+  }
+});
+
+function normalize(str) {
+  return str.toLowerCase().trim();
+}
+
+function isCorrectAnswer(userRaw, card) {
+  const user = normalize(userRaw);
+  return card.answerForms.some(a => normalize(a) === user);
+}
+
+function checkAnswer(userRawOverride) {
+  if (!current) return;
+  const userRaw = (typeof userRawOverride === "string")
+    ? userRawOverride
+    : document.getElementById('answer').value;
+
+  const isCorrect = isCorrectAnswer(userRaw, current);
+
+  results.push({
+    word: current.word,
+    question: current.question,
+    correctAnswer: current.answerMain,
+    userAnswer: userRaw,
+    ok: isCorrect
+  });
+
+  if (isCorrect) correctCount++; else wrongCount++;
+  updateScore();
+
+  const feedback = document.getElementById('feedback');
+  if (isCorrect) {
+    feedback.textContent = "Goed! ✔ (" + current.answerMain + ")";
+    feedback.style.color = "green";
+  } else {
+    feedback.textContent = "Niet goed. Antwoord: " + current.answerMain;
+    feedback.style.color = "red";
+  }
+  answeredCurrent = true;
+}
+
+function buildMcOptions() {
+  const container = document.getElementById('mc-options');
+  container.innerHTML = "";
+
+  const correct = current.answerMain;
+  const others = allCards.filter(c => c.question !== current.question);
+  shuffle(others);
+  const distractors = others.slice(0, 3).map(c => c.answerMain);
+
+  const options = shuffle([correct, ...distractors]);
+
+  options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.textContent = opt;
+    btn.onclick = () => {
+      if (answeredCurrent) return;
+      checkAnswer(opt);
+    };
+    container.appendChild(btn);
+  });
+}
+
+function endGame() {
+  gameActive = false;
+  document.getElementById('question').textContent = "Klaar!";
+  document.getElementById('answer').style.display = 'none';
+  document.getElementById('nextBtn').style.display = 'none';
+  document.getElementById('mc-options').style.display = 'none';
+  document.getElementById('feedback').textContent = "";
+
+  const wrong = results.filter(r => !r.ok);
+  const summary = document.getElementById('summary');
+
+  if (wrong.length === 0) {
+    summary.innerHTML =
+      "<h2>Klaar!</h2><p>Alles goed! 🎉</p>" +
+      "<p>Goed: " + correctCount + " | Fout: " + wrongCount + "</p>";
+  } else {
+    let html =
+      "<h2>Klaar!</h2>" +
+      "<p>Goed: " + correctCount + " | Fout: " + wrongCount + "</p>" +
+      "<h3>Deze waren fout:</h3><ul>";
+    wrong.forEach(r => {
+      html += "<li><strong>" + r.question +
+              "</strong> – juist: " + r.correctAnswer +
+              " | jouw antwoord: " + (r.userAnswer || "(leeg)") + "</li>";
+    });
+    html += "</ul><button onclick='repeatWrong()'>Herhaal foute woorden</button>";
+    summary.innerHTML = html;
+  }
+}
+
+function repeatWrong() {
+  const wrong = results.filter(r => !r.ok);
+  if (wrong.length === 0) {
+    alert("Geen foute woorden om te herhalen.");
+    return;
+  }
+
+  allCards = wrong.map(r => makeCardFromWord(r.word));
+  remaining = shuffle(allCards.slice());
+  results = [];
+  correctCount = 0;
+  wrongCount = 0;
+  updateScore();
+  gameActive = true;
+  answeredCurrent = false;
+
+  document.getElementById('summary').innerHTML = "";
+  document.getElementById('game-container').style.display = 'block';
+  document.getElementById('answer').style.display =
+    (gameType === "open") ? 'inline-block' : 'none';
+  document.getElementById('mc-options').style.display =
+    (gameType === "mc") ? 'block' : 'none';
+  document.getElementById('nextBtn').style.display = 'inline-block';
+
+  showNext();
+  if (gameType === "open") {
+    document.getElementById('answer').focus();
+  }
+}
+</script>
+</body>
+</html>
