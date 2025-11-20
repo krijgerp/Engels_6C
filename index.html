@@ -15,6 +15,7 @@
     #answer {padding:8px; font-size:18px; width:80%; max-width:300px;}
     #feedback {margin-top:10px; font-weight:bold;}
     #lesson-select label {margin:0 8px;}
+    #score {margin-top:10px; font-weight:bold;}
   </style>
 </head>
 <body>
@@ -35,14 +36,17 @@
 </div>
 
 <div id="game-container">
+  <div id="score"></div>
   <div id="controls">
-    <button onclick="showNext()">Volgende</button>
+    <button id="nextBtn" onclick="onNextClick()">Volgende</button>
     <button onclick="stopGame()">Stop</button>
   </div>
   <div id="question"></div>
   <input id="answer" autocomplete="off" placeholder="Typ het antwoord en druk Enter">
   <div id="feedback"></div>
 </div>
+
+<div id="summary"></div>
 
 <script>
 const WORDS = [
@@ -99,8 +103,26 @@ const WORDS = [
 ];
 
 let mode = "en-nl";
-let pool = [];
+let remaining = [];
 let current = null;
+let results = [];
+let gameActive = false;
+let answeredCurrent = false;
+let correctCount = 0;
+let wrongCount = 0;
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function updateScore() {
+  document.getElementById('score').textContent =
+    "Goed: " + correctCount + " | Fout: " + wrongCount;
+}
 
 function startGame(selectedMode) {
   mode = selectedMode;
@@ -108,33 +130,74 @@ function startGame(selectedMode) {
     document.querySelectorAll('#lesson-select input:checked')
   ).map(cb => Number(cb.value));
 
-  pool = WORDS.filter(w => checkedLessons.includes(w.lesson));
-  if (pool.length === 0) {
+  const poolWords = WORDS.filter(w => checkedLessons.includes(w.lesson));
+  if (poolWords.length === 0) {
     alert("Selecteer minstens één les.");
     return;
   }
+
+  remaining = shuffle(poolWords.map(w => ({
+    word: w,
+    question: (mode === "en-nl") ? w.en : w.nl,
+    answer: (mode === "en-nl") ? w.nl : w.en
+  })));
+
+  results = [];
+  correctCount = 0;
+  wrongCount = 0;
+  updateScore();
+  gameActive = true;
+  answeredCurrent = false;
+
   document.getElementById('mode-selection').style.display = 'none';
   document.getElementById('game-container').style.display = 'block';
+  document.getElementById('summary').innerHTML = "";
   document.getElementById('feedback').textContent = "";
+  document.getElementById('answer').style.display = 'inline-block';
+  document.getElementById('nextBtn').style.display = 'inline-block';
+
   showNext();
   document.getElementById('answer').focus();
 }
 
 function stopGame() {
+  gameActive = false;
   document.getElementById('game-container').style.display = 'none';
   document.getElementById('mode-selection').style.display = 'block';
 }
 
 function showNext() {
-  current = pool[Math.floor(Math.random() * pool.length)];
-  const q = (mode === "en-nl") ? current.en : current.nl;
-  document.getElementById('question').textContent = q;
+  if (!gameActive) return;
+
+  if (remaining.length === 0) {
+    endGame();
+    return;
+  }
+
+  current = remaining.pop();
+  document.getElementById('question').textContent = current.question;
   document.getElementById('answer').value = "";
   document.getElementById('feedback').textContent = "";
+  answeredCurrent = false;
+}
+
+function onNextClick() {
+  if (!answeredCurrent) {
+    alert("Eerst beantwoorden en op Enter drukken.");
+    return;
+  }
+  showNext();
 }
 
 document.getElementById('answer').addEventListener('keydown', e => {
-  if (e.key === "Enter") checkAnswer();
+  if (e.key === "Enter") {
+    if (!gameActive) return;
+    if (!answeredCurrent) {
+      checkAnswer();
+    } else {
+      showNext();
+    }
+  }
 });
 
 function normalize(str) {
@@ -143,18 +206,91 @@ function normalize(str) {
 
 function checkAnswer() {
   if (!current) return;
-  const user = normalize(document.getElementById('answer').value);
-  const correct = (mode === "en-nl") ? current.nl : current.en;
+  const userRaw = document.getElementById('answer').value;
+  const isCorrect = normalize(userRaw) === normalize(current.answer);
 
-  const ok = user.length > 0 && correct.toLowerCase().startsWith(user);
+  results.push({
+    word: current.word,
+    question: current.question,
+    correctAnswer: current.answer,
+    userAnswer: userRaw,
+    ok: isCorrect
+  });
+
+  if (isCorrect) {
+    correctCount++;
+  } else {
+    wrongCount++;
+  }
+  updateScore();
+
   const feedback = document.getElementById('feedback');
-  if (ok) {
-    feedback.textContent = "Goed! ✔  (" + correct + ")";
+  if (isCorrect) {
+    feedback.textContent = "Goed! ✔ (" + current.answer + ")";
     feedback.style.color = "green";
   } else {
-    feedback.textContent = "Niet helemaal… Antwoord: " + correct;
+    feedback.textContent = "Niet goed. Antwoord: " + current.answer;
     feedback.style.color = "red";
   }
+  answeredCurrent = true;
+}
+
+function endGame() {
+  gameActive = false;
+  document.getElementById('question').textContent = "Klaar!";
+  document.getElementById('answer').style.display = 'none';
+  document.getElementById('nextBtn').style.display = 'none';
+  document.getElementById('feedback').textContent = "";
+
+  const wrong = results.filter(r => !r.ok);
+  const summary = document.getElementById('summary');
+
+  if (wrong.length === 0) {
+    summary.innerHTML =
+      "<h2>Klaar!</h2><p>Alles goed! 🎉</p>" +
+      "<p>Goed: " + correctCount + " | Fout: " + wrongCount + "</p>";
+  } else {
+    let html =
+      "<h2>Klaar!</h2>" +
+      "<p>Goed: " + correctCount + " | Fout: " + wrongCount + "</p>" +
+      "<h3>Deze waren fout:</h3><ul>";
+    wrong.forEach(r => {
+      html += "<li><strong>" + r.question +
+              "</strong> – juist: " + r.correctAnswer +
+              " | jouw antwoord: " + (r.userAnswer || "(leeg)") + "</li>";
+    });
+    html += "</ul><button onclick='repeatWrong()'>Herhaal foute woorden</button>";
+    summary.innerHTML = html;
+  }
+}
+
+function repeatWrong() {
+  const wrong = results.filter(r => !r.ok);
+  if (wrong.length === 0) {
+    alert("Geen foute woorden om te herhalen.");
+    return;
+  }
+
+  remaining = shuffle(wrong.map(r => ({
+    word: r.word,
+    question: r.question,
+    answer: r.correctAnswer
+  })));
+
+  results = [];
+  correctCount = 0;
+  wrongCount = 0;
+  updateScore();
+  gameActive = true;
+  answeredCurrent = false;
+
+  document.getElementById('summary').innerHTML = "";
+  document.getElementById('game-container').style.display = 'block';
+  document.getElementById('answer').style.display = 'inline-block';
+  document.getElementById('nextBtn').style.display = 'inline-block';
+
+  showNext();
+  document.getElementById('answer').focus();
 }
 </script>
 </body>
